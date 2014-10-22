@@ -33,7 +33,6 @@ var fs            = require('fs'),
 module.exports = function(project) {
     this.path = project;
     this.config = new ConfigParser(this.config_xml());
-    this.update_manifest();
 };
 
 function sanitize(str) {
