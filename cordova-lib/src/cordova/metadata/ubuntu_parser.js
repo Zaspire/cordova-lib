@@ -38,7 +38,6 @@ function ubuntu_parser(project) {
 
     this.path = project;
     this.config = new ConfigParser(this.config_xml());
-    this.update_manifest();
 }
 
 function sanitize(str) {
@@ -63,63 +62,12 @@ ubuntu_parser.prototype.update_from_config = function(config) {
 
     this.config.write();
 
-    return this.update_manifest();
+    return Q();
 };
 
 ubuntu_parser.prototype.cordovajs_path = function(libDir) {
     var jsPath = path.join(libDir, 'www', 'cordova.js');
     return path.resolve(jsPath);
-};
-
-ubuntu_parser.prototype.update_manifest = function() {
-    var nodearch2debarch = { 'arm': 'armhf',
-                             'ia32': 'i386',
-                             'x64': 'amd64'};
-    var arch;
-    if (os.arch() in nodearch2debarch)
-        arch = nodearch2debarch[os.arch()];
-    else
-        return Q.reject(new Error('unknown cpu arch'));
-
-    if (!this.config.author())
-        return Q.reject(new Error('config.xml should contain author'));
-
-    var manifest = { name: this.config.packageName(),
-                     version: this.config.version(),
-                     title: this.config.name(),
-                     hooks: { cordova: { desktop: 'cordova.desktop',
-                                         apparmor: 'apparmor.json' } },
-                     framework: 'ubuntu-sdk-13.10',
-                     maintainer: sanitize(this.config.author())  + ' <' + this.config.doc.find('author').attrib.email + '>',
-                     architecture: arch,
-                     description: sanitize(this.config.description()) };
-
-    var name = sanitize(this.config.name()); //FIXME: escaping
-    var content = '[Desktop Entry]\nName=' + name + '\nExec=./cordova-ubuntu www/\nTerminal=false\nType=Application\nX-Ubuntu-Touch=true';
-
-    if (this.config.doc.find('icon') && this.config.doc.find('icon').attrib.src) {
-        var iconPath = path.join(this.path, 'www', this.config.doc.find('icon').attrib.src);
-        if (fs.existsSync(iconPath))
-            content += '\nIcon=www/' + this.config.doc.find('icon').attrib.src;
-        else
-            return Q.reject(new Error('icon does not exist: ' + iconPath));
-    } else {
-        content += '\nIcon=qmlscene';
-        console.warn('missing icon element in config.xml');
-    }
-    fs.writeFileSync(path.join(this.path, 'manifest.json'), JSON.stringify(manifest));
-    fs.writeFileSync(path.join(this.path, 'cordova.desktop'), content);
-
-    var policy = { policy_groups: ['networking', 'audio'], policy_version: 1 };
-
-    this.config.doc.getroot().findall('./feature/param').forEach(function (element) {
-        if (element.attrib.policy_group && policy.policy_groups.indexOf(element.attrib.policy_group) === -1)
-            policy.policy_groups.push(element.attrib.policy_group);
-    });
-
-    fs.writeFileSync(path.join(this.path, 'apparmor.json'), JSON.stringify(policy));
-
-    return Q();
 };
 
 ubuntu_parser.prototype.config_xml = function(){
@@ -151,8 +99,7 @@ ubuntu_parser.prototype.update_overrides = function() {
 ubuntu_parser.prototype.update_project = function(cfg) {
     var self = this;
 
-    return this.update_from_config(cfg)
-    .then(function() {
+    return this.update_from_config(cfg).then(function() {
         self.update_overrides();
         util.deleteSvnFolders(self.www_dir());
     });
